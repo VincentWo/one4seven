@@ -60,7 +60,7 @@ where
             6 => [true, false, true, true, true, true, true],
             7 => [true, true, true, false, false, false, false],
             8 => [true, true, true, true, true, true, true],
-            9 => [true, true, true, false, false, true, true],
+            9 => [true, true, true, true, false, true, true],
             _too_large => unreachable!(),
         };
 
