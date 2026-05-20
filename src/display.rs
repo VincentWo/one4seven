@@ -1,92 +1,210 @@
 use core::time::Duration;
 
-use embedded_hal::i2c::{self, ErrorType};
-use ht16k33::{HT16K33, LedLocation};
+use crate::segment::{self, State};
 
-pub struct Display<I2c>
+pub struct Display<Driver>
 where
-    I2c: i2c::I2c,
+    Driver: segment::Driver,
 {
-    pub ht16k33: HT16K33<I2c>,
+    pub inner: Driver,
 }
 
-impl<I2c> Display<I2c>
+impl<Driver> Display<Driver>
 where
-    I2c: i2c::I2c,
+    Driver: segment::Driver,
 {
-    pub fn new(ht16k33: HT16K33<I2c>) -> Self {
-        Self { ht16k33 }
+    pub fn new(inner: Driver) -> Self {
+        Self { inner }
     }
 
-    pub fn set_duration(&mut self, duration: Duration) -> Result<(), <I2c as ErrorType>::Error> {
+    pub fn set_duration(&mut self, duration: Duration) -> Result<(), Driver::Error> {
         let seconds = duration.as_secs();
-        let minutes: u8 = (seconds / 60).try_into().unwrap();
-        let seconds: u8 = (seconds % 60).try_into().unwrap();
+        let minutes = seconds / 60;
+        let seconds = seconds % 60;
 
-        assert!(minutes < 99);
+        if minutes < 100 {
+            let digits = [
+                (minutes >= 10).then_some(minutes / 10),
+                Some(minutes % 10),
+                Some(seconds / 10),
+                Some(seconds % 10),
+            ];
 
-        let digits = [
-            (minutes >= 10).then_some(minutes / 10),
-            Some(minutes % 10),
-            Some(seconds / 10),
-            Some(seconds % 10),
-        ];
-
-        for (i, digit) in digits.into_iter().enumerate() {
-            if let Some(digit) = digit {
-                self.set_digit(i as u8, digit)
-            } else {
-                self.clear_digit(i as u8)
-            };
+            for (i, digit) in digits.into_iter().enumerate() {
+                if let Some(digit) = digit {
+                    self.set_digit(i as u8, digit as u8)?;
+                } else {
+                    self.clear_digit(i as u8)?;
+                };
+            }
+        } else {
+            let hours = minutes / 60;
+            let minutes = minutes % 60;
+            if hours < 10 {
+                self.set_digit(0, hours as u8)?;
+                self.inner.set_state(
+                    1,
+                    State {
+                        top_left: true,
+                        bottom_left: true,
+                        middle: true,
+                        bottom_right: true,
+                        ..Default::default()
+                    },
+                )?;
+                self.set_digit(2, (minutes / 10) as u8)?;
+                self.set_digit(3, (minutes % 10) as u8)?;
+            } else if hours < 1000 {
+                for (pos, digit) in [
+                    (hours >= 100).then_some(hours / 100),
+                    (hours >= 10).then_some((hours / 10) % 10),
+                    Some(hours % 10),
+                ]
+                .into_iter()
+                .enumerate()
+                {
+                    if let Some(digit) = digit {
+                        self.set_digit(pos as u8, (digit) as u8)?;
+                    } else {
+                        self.clear_digit(pos as u8)?;
+                    }
+                }
+                self.inner.set_state(
+                    3,
+                    State {
+                        top_left: true,
+                        bottom_left: true,
+                        middle: true,
+                        bottom_right: true,
+                        ..Default::default()
+                    },
+                )?;
+            }
         }
 
-        self.ht16k33.write_display_buffer()
+        self.inner.update()
     }
 
-    pub fn set_digit(&mut self, mut column: u8, digit: u8) {
-        assert!(column < 4);
-        // The third column is the colon
-        if column > 1 {
-            column += 1;
+    pub fn set_missing(&mut self) -> Result<(), Driver::Error> {
+        for pos in 0..4 {
+            self.inner.set_state(
+                pos,
+                State {
+                    middle: true,
+                    ..Default::default()
+                },
+            )?;
         }
 
-        let data = match digit {
-            0 => [true, true, true, true, true, true, false],
-            1 => [false, true, true, false, false, false, false],
-            2 => [true, true, false, true, true, false, true],
-            3 => [true, true, true, true, false, false, true],
-            4 => [false, true, true, false, false, true, true],
-            5 => [true, false, true, true, false, true, true],
-            6 => [true, false, true, true, true, true, true],
-            7 => [true, true, true, false, false, false, false],
-            8 => [true, true, true, true, true, true, true],
-            9 => [true, true, true, false, false, true, true],
+        Ok(())
+    }
+
+    pub fn set_digit(&mut self, pos: u8, digit: u8) -> Result<(), Driver::Error> {
+        let state = match digit {
+            0 => segment::State {
+                top: true,
+                top_left: true,
+                top_right: true,
+                bottom_left: true,
+                bottom_right: true,
+                bottom: true,
+                ..Default::default()
+            },
+            1 => segment::State {
+                top_right: true,
+                bottom_right: true,
+                ..Default::default()
+            },
+            2 => segment::State {
+                top: true,
+                top_right: true,
+                middle: true,
+                bottom_left: true,
+                bottom: true,
+                ..Default::default()
+            },
+            3 => segment::State {
+                top: true,
+                top_right: true,
+                middle: true,
+                bottom_right: true,
+                bottom: true,
+                ..Default::default()
+            },
+            4 => segment::State {
+                top_left: true,
+                top_right: true,
+                middle: true,
+                bottom_right: true,
+                ..Default::default()
+            },
+            5 => segment::State {
+                top: true,
+                top_left: true,
+                middle: true,
+                bottom_right: true,
+                bottom: true,
+                ..Default::default()
+            },
+            6 => segment::State {
+                top: true,
+                top_left: true,
+                middle: true,
+                bottom_right: true,
+                bottom: true,
+                bottom_left: true,
+                ..Default::default()
+            },
+            7 => segment::State {
+                top: true,
+                top_right: true,
+                bottom_right: true,
+                ..Default::default()
+            },
+            8 => segment::State {
+                top: true,
+                top_left: true,
+                top_right: true,
+                middle: true,
+                bottom_left: true,
+                bottom_right: true,
+                bottom: true,
+                ..Default::default()
+            },
+            9 => segment::State {
+                top: true,
+                top_left: true,
+                top_right: true,
+                middle: true,
+                bottom_right: true,
+                bottom: true,
+                ..Default::default()
+            },
             _too_large => unreachable!(),
         };
+        //     [true, true, true, true, true, true, false],
+        //     [false, true, true, false, false, false, false],
+        //     [true, true, false, true, true, false, true],
+        //     [true, true, true, true, false, false, true],
+        //     [false, true, true, false, false, true, true],
 
-        for (row, enabled) in data.into_iter().enumerate() {
-            self.ht16k33.update_display_buffer(
-                ht16k33::LedLocation {
-                    row: row as u8,
-                    column,
-                },
-                enabled,
-            );
-        }
+        //     [true, false, true, true, false, true, true],
+
+        //     [true, false, true, true, true, true, true]
+
+        // [true, true, true, false, false, false, false]
+
+        //     [true, true, true, true, true, true, true]
+
+        //     [true, true, true, false, false, true, true]
+
+        self.inner.set_state(pos, state)
     }
-    pub fn clear_digit(&mut self, mut column: u8) {
-        if column > 1 {
-            column += 1;
-        }
-
-        for row in 0..8 {
-            self.ht16k33
-                .update_display_buffer(LedLocation { row, column }, false);
-        }
+    pub fn clear_digit(&mut self, digit: u8) -> Result<(), Driver::Error> {
+        self.inner.set_state(digit, Default::default())
     }
 
-    pub fn set_colon(&mut self, enabled: bool) {
-        self.ht16k33
-            .update_display_buffer(ht16k33::LedLocation { row: 1, column: 2 }, enabled);
+    pub fn set_colon(&mut self, enabled: bool) -> Result<(), Driver::Error> {
+        self.inner.set_colon(enabled)
     }
 }
