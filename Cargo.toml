@@ -2,3 +2,9 @@
 name = "one4seven"
 version = "0.1.0"
 edition = "2024"
+description = "A harward agnostic 7-segment driver"
+readme = "README.md"
+repository = "https://github.com/VincentWo/one4seven"
+license = "GPL-3.0"
+keywords = ["display", "driver", "7-segment"]
+categories = ["embedded", "no-std"]
