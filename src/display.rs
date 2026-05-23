@@ -96,7 +96,7 @@ where
             )?;
         }
 
-        Ok(())
+        self.inner.update()
     }
 
     pub fn set_digit(&mut self, pos: u8, digit: u8) -> Result<(), Driver::Error> {
