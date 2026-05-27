@@ -7,6 +7,7 @@ pub trait Driver {
     fn update(&mut self) -> Result<(), Self::Error>;
 }
 
+#[derive(Debug, PartialEq, Eq)]
 pub enum Segment {
     Top,
     TopLeft,
